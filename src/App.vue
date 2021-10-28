@@ -35,6 +35,7 @@
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
+                v-on:input="toHint(ticker.toUpperCase())"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -43,31 +44,21 @@
               />
             </div>
             <div
-              @click.stop="tickerItem"
+              v-if="ticker"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                @click.stop="tickerItem"
+                v-for="(hint, idx) of hintCoins"
+                :key="idx"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ hint }}
               </span>
             </div>
-            <div v-if="bool()" class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="bool()" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -186,34 +177,39 @@ export default {
     return {
       ticker: "",
       tickers: [],
+      fetchCoins: [],
       sel: null,
       graph: [],
+      hintCoins: [],
     };
+  },
+  created: async function() {
+    //get fetch coins
+    const f = await fetch(
+      "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+    );
+    const data = await f.json();
+    this.fetchCoins = await Object.keys(data.Data);
+
+    //get localStorage data
+    const tickersData = localStorage.getItem("cryptonomicon-list");
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach((ticker) => {
+        this.subscribeToUpdate(ticker.name);
+      });
+    }
   },
   methods: {
     add() {
       const currentTicker = {
-        name: this.ticker,
+        name: this.ticker.toUpperCase(),
         price: "-",
       };
 
       this.tickers.push(currentTicker);
-
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=d292ab80afe360db7e6b81937601515fcf35089d34446168c37c71b530ffd213`
-        );
-        const data = await f.json();
-        this.tickers.find((t) => t.name === currentTicker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        console.log("data= ", data, " ticker=", this.ticker, " sel=", this.sel," tickers=",this.tickers);
-
-        if (this.sel?.name === currentTicker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-
-      this.ticker = "";
+      localStorage.setItem("cryptonomicon-list", JSON.stringify(this.tickers));
+      this.subscribeToUpdate(currentTicker.name);
     },
     handleDelete(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
@@ -226,16 +222,47 @@ export default {
       );
     },
     tickerItem(e) {
-      this.ticker = e.target.innerText;
+      this.ticker = e.target.innerText.toUpperCase();
+    },
+    subscribeToUpdate(tickerName) {
+      setInterval(async () => {
+        const f = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=d292ab80afe360db7e6b81937601515fcf35089d34446168c37c71b530ffd213`
+        );
+        const data = await f.json();
+        this.tickers.find((t) => t.name === tickerName).price =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+
+        if (this.sel?.name === tickerName) {
+          this.graph.push(data.USD);
+        }
+      }, 5000);
+      this.ticker = "";
     },
     select(ticker) {
       this.sel = ticker;
       this.graph = [];
     },
-     bool(){
-      return this.tickers.find((t)=>t.name===this.ticker)
-    }
+    bool() {
+      return this.tickers.find(
+        (t) => t.name.toUpperCase() === this.ticker.toUpperCase()
+      );
+    },
+    toHint(ticker) {
+      this.hintCoins = [];
+      let count = 0;
+      console.log("ticker", ticker);
+      for (let i = 0; i < this.fetchCoins.length; i++) {
+        if (count === 4) break;
+
+        if (this.fetchCoins[i].includes(ticker)) {
+          this.hintCoins.push(this.fetchCoins[i]);
+          console.log("сравнение", this.fetchCoins[i], "=", ticker);
+          count++;
+          console.log("массив и попытки", this.hintCoins, " ,", count);
+        }
+      }
+    },
   },
 };
 </script>
-
