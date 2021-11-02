@@ -118,7 +118,7 @@
                 {{ t.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ t.price }}
+                {{ formatPrice(t.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -189,6 +189,7 @@
 </template>
 
 <script>
+import { subscribeToTicker, unsubscribeFromTicker } from "./api";
 export default {
   name: "App",
   data() {
@@ -260,10 +261,13 @@ export default {
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
-      this.tickers.forEach((ticker) => {
-        this.subscribeToUpdate(ticker.name);
-      });
+      this.tickers.forEach((ticker) =>
+        subscribeToTicker(ticker.name, (newPrice) => {
+          this.updateTicker(this.ticker.name, newPrice);
+        })
+      );
     }
+    setInterval(this.updateTickers, 5000);
   },
   methods: {
     add() {
@@ -273,35 +277,43 @@ export default {
       };
 
       this.tickers = [...this.tickers, currentTicker];
+      this.ticker = "";
       this.filter = "";
+      subscribeToTicker(currentTicker.name, (newPrice) => {
+        this.updateTicker(this.ticker.name,newPrice)
+      });
+    },
 
-      this.subscribeToUpdate(currentTicker.name);
+    formatPrice(price) {
+      if (price === "-") return price;
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
     },
     handleDelete(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
       if (this.selectedTicker === tickerToRemove) {
         this.selectedTicker = null;
       }
+      unsubscribeFromTicker(tickerToRemove.name);
     },
 
     tickerItem(e) {
       this.ticker = e.target.innerText.toUpperCase();
     },
-    subscribeToUpdate(tickerName) {
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=d292ab80afe360db7e6b81937601515fcf35089d34446168c37c71b530ffd213`
-        );
-        const data = await f.json();
-        this.tickers.find((t) => t.name === tickerName).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        if (this.selectedTicker?.name === tickerName) {
-          this.graph.push(data.USD);
-        }
-        console.log("fetch = ", data);
-      }, 5000);
-      this.ticker = "";
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => (t.price = price));
+    },
+    async updateTickers() {
+      // if (!this.tickers.length) return;
+      // this.tickers.forEach((ticker) => {
+      //   const price = exchangeData[ticker.name.toUpperCase()];
+      //   if (!price) {
+      //     ticker.price = "-";
+      //     return;
+      //   }
+      //   ticker.price = price ?? "-";
+      // });
     },
     select(ticker) {
       this.selectedTicker = ticker;
